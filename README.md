@@ -16,8 +16,9 @@ I selected the **USGS NWIS (National Water Information System) REST API**. I cho
    pip install pandas requests matplotlib
   
 Execute the Script:
-Bash
-python water_script.py
+  ```bash
+       python water_script.py
+
 Outputs:
 A summary printed to the console.
 A cleaned dataset saved as cleaned_water_data.csv.
@@ -32,4 +33,4 @@ Code
 *   It uses **Markdown formatting** (the `#` and ` ``` ` blocks), which VS Code will render beautifully.
 *   It looks like a finished product ready for a senior developer to review.
 
-**Once you make that change, your submission is 10/10! Good luck with the interview!**
+
