@@ -18,7 +18,7 @@ I selected the **USGS NWIS (National Water Information System) REST API**. I cho
 Execute the Script:
   ```bash
        python water_script.py
-
+```
 Outputs:
 A summary printed to the console.
 A cleaned dataset saved as cleaned_water_data.csv.
@@ -32,5 +32,6 @@ Code
 *   It removes the "meta-talk" (instructions to you).
 *   It uses **Markdown formatting** (the `#` and ` ``` ` blocks), which VS Code will render beautifully.
 *   It looks like a finished product ready for a senior developer to review.
+
 
 
