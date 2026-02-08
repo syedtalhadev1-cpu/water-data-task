@@ -1,74 +1,81 @@
 import requests
 import pandas as pd
-import matplotlib.pyplot as plt
+import json
+import matplotlib.pyplot as plt # Added for plotting
 
 def main():
-    # --- 1. RETRIEVE DATA PROGRAMMATICALLY (Modern OGC API) ---
-    url = "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items?f=json&limit=5000&monitoring_location_id=USGS-08330000&parameter_code=00060&time=P30D"
+    # --- 1. RETRIEVE DATA PROGRAMMATICALLY ---
+    url = (
+        "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items"
+        "?f=json&monitoring_location_id=USGS-08330000&parameter_code=00060&time=P30D&limit=5000"
+    )
 
-    print(f"Connecting to MODERN USGS API...")
+    print("Connecting to USGS API...")
     response = requests.get(url)
-    if response.status_code != 200:
-        print("Error: Could not fetch data from modern API.")
-        return
-    
+    response.raise_for_status()
     json_data = response.json()
 
+    # --- SAVE RAW DATA ---
+    with open("raw_data.json", "w") as f:
+        json.dump(json_data, f, indent=4)
+    print("Success: Raw data saved to 'raw_data.json'")
+
     # --- 2. LOAD AND CLEAN THE DATA ---
-    try:
-        features = json_data.get('features', [])
-        if not features:
-            print("No data found.")
-            return
+    features = json_data.get("features", [])
+    df = pd.json_normalize(features)
 
-        # Flatten the GeoJSON structure
-        df = pd.json_normalize(features)
+    # CHECK FOR NULL VALUES
+    initial_nulls = df['properties.value'].isna().sum()
+    print(f"Checking for null values: Found {initial_nulls} missing entries.")
 
-        # CLEANING: Column Selection
-        df = df[['properties.time', 'properties.value']]
-        df.columns = ['timestamp', 'discharge_cfs']
+    # CLEANING: Column Selection and Datetime Parsing
+    df = df[['properties.time', 'properties.value']]
+    df.columns = ['timestamp', 'discharge_cfs']
+    
+    # Convert to local Mountain Time (Website time)
+    df['timestamp'] = pd.to_datetime(df['timestamp']).dt.tz_convert('US/Mountain')
+    
+    # Create AM/PM format for the CSV
+    df['time_ampm'] = df['timestamp'].dt.strftime('%Y-%m-%d %I:%M %p')
 
-        # CLEANING: Datetime parsing
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        
-        # CLEANING: Numeric conversion
-        df['discharge_cfs'] = pd.to_numeric(df['discharge_cfs'], errors='coerce')
-        df = df.dropna(subset=['discharge_cfs'])
+    # CLEANING: Numeric conversion and drop nulls
+    df['discharge_cfs'] = pd.to_numeric(df['discharge_cfs'], errors='coerce')
+    df = df.dropna(subset=['discharge_cfs'])
 
-        # --- 3. PRODUCE A SIMPLE SUMMARY ---
-        print("\n--- MODERN API DATA SUMMARY ---")
-        print(f"Observations retrieved: {len(df)}")
-        print(f"Average Flow: {df['discharge_cfs'].mean():.2f} cfs")
-        print(f"Max Flow:     {df['discharge_cfs'].max()} cfs")
-        
-        # Latest reading (Modern API sorts newest-first, so index 0)
-        latest = df.iloc[0]
-        print(f"Most Recent:  {latest['discharge_cfs']} cfs at {latest['timestamp']}")
+    # --- 3. PRODUCE A SIMPLE SUMMARY ---
+    print("\n" + "="*30)
+    print("      DATA SUMMARY")
+    print("="*30)
+    print(f"Total Observations: {len(df)}")
+    print(f"Minimum Flow:       {df['discharge_cfs'].min()} cfs")
+    print(f"Maximum Flow:       {df['discharge_cfs'].max()} cfs")
+    print(f"Average Flow:       {df['discharge_cfs'].mean():.2f} cfs")
+    
+    latest = df.iloc[-1]
+    print(f"Latest Reading:     {latest['discharge_cfs']} cfs")
+    print(f"Latest Time:        {latest['time_ampm']}")
+    print("="*30)
 
-        # --- 3.4 ADDING THE PLOT (OPTIONAL REQUIREMENT) ---
-        # We sort by timestamp so the graph flows from left (old) to right (new)
-        df_sorted = df.sort_values('timestamp')
+    # --- 4. GENERATE PLOT DIAGRAM ---
+    print("\nGenerating plot...")
+    plt.figure(figsize=(10, 6))
+    plt.plot(df['timestamp'], df['discharge_cfs'], color='blue', linewidth=2)
+    
+    # Adding labels and title
+    plt.title('Rio Grande Discharge at Albuquerque (Last 30 Days)', fontsize=14)
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('Discharge (cubic feet per second)', fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # Formatting the layout
+    plt.tight_layout()
+    plt.savefig("water_chart.png") # Saves the plot as an image
+    print("Success: Plot saved as 'water_chart.png'")
 
-        plt.figure(figsize=(12, 6))
-        plt.plot(df_sorted['timestamp'], df_sorted['discharge_cfs'], color='#0077b6', linewidth=1.5)
-        
-        # Formatting the chart
-        plt.title('Rio Grande Discharge at Albuquerque (Last 30 Days)', fontsize=14)
-        plt.xlabel('Date', fontsize=12)
-        plt.ylabel('Flow (Cubic Feet per Second)', fontsize=12)
-        plt.grid(True, linestyle='--', alpha=0.7)
-        plt.tight_layout()
-        
-        # Save the plot as a PNG file
-        plt.savefig('water_discharge_plot.png')
-        print("\n[Plot saved as 'water_discharge_plot.png']")
-
-        # --- 4. SAVE OUTPUT ---
-        df.to_csv("modern_cleaned_water_data.csv", index=False)
-        print("Success: Saved to 'modern_cleaned_water_data.csv'")
-
-    except Exception as e:
-        print(f"Error parsing modern GeoJSON: {e}")
+    # --- 5. SAVE CSV OUTPUT ---
+    df_final = df[['time_ampm', 'discharge_cfs']]
+    df_final.to_csv("cleaned_water_data.csv", index=False)
+    print("Success: Cleaned dataset saved as 'cleaned_water_data.csv'")
 
 if __name__ == "__main__":
     main()
